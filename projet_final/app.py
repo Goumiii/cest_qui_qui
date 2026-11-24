@@ -41,6 +41,8 @@ def texte_verdict(verdict):
         lignes.append("✅ **Preuve acceptée.**")
     else:
         lignes.append(f"❌ **Preuve refusée.** Il fallait : {verdict['preuve_attendue']}.")
+    if verdict["vu_par_arbitre"]:
+        lignes.append(f"\n🔍 *L'arbitre a vu : {verdict['vu_par_arbitre']}*")
     lignes.append(f"\n**Ce qui s'est passé :** {verdict['solution']}")
     lignes.append(f"\nQuestions utilisées : {verdict['questions_utilisees']}")
     lignes.append(f"\n# Score : {verdict['score']} / 100")
@@ -67,6 +69,7 @@ def demarrer(pseudo, titre):
         texte_compteur(partie),                       # compteur à 12
         gr.update(choices=noms, value=None),          # choix du coupable
         "",                                           # pièce à conviction vide
+        None,                                         # image vide
         "",                                           # verdict vide
     )
 
@@ -94,12 +97,14 @@ def envoyer(partie, nom, question):
     return list(partie.historiques[nom]), "", texte_compteur(partie)
 
 
-def accuser(partie, nom_accuse, preuve):
+def accuser(partie, nom_accuse, preuve, image):
     """Bouton « C'est lui ! C'est elle ! » : affiche le verdict."""
     if partie is None:
         raise gr.Error("Lance d'abord une nouvelle partie.")
+    if not image and (preuve is None or preuve.strip() == ""):
+        raise gr.Error("Présente une pièce à conviction : une image ou une description.")
     try:
-        verdict = jeu.accuser(partie, nom_accuse, preuve)
+        verdict = jeu.accuser(partie, nom_accuse, description=preuve, image=image)
     except ValueError as erreur:
         raise gr.Error(str(erreur))
     return texte_verdict(verdict)
@@ -143,8 +148,10 @@ with gr.Blocks(title=TITRE) as demo:
         gr.Markdown("## L'accusation")
         with gr.Row():
             choix_accuse = gr.Radio([], label="Qui est coupable ?", scale=1)
-            preuve = gr.Textbox(label="La pièce à conviction",
-                                placeholder="Décris l'objet qui trahit le coupable", scale=2)
+            with gr.Column(scale=2):
+                image = gr.Image(type="filepath", label="La pièce à conviction en image", height=200)
+                preuve = gr.Textbox(label="… ou décris-la par écrit",
+                                    placeholder="Décris l'objet qui trahit le coupable")
         bouton_accuser = gr.Button("C'est lui ! C'est elle !", variant="stop")
 
         verdict = gr.Markdown()
@@ -160,7 +167,7 @@ with gr.Blocks(title=TITRE) as demo:
         demarrer,
         inputs=[pseudo, choix_affaire],
         outputs=[partie, description, choix_coloc, caractere, conversation,
-                 question, compteur, choix_accuse, preuve, verdict],
+                 question, compteur, choix_accuse, preuve, image, verdict],
     )
     choix_coloc.change(changer_suspect, inputs=[partie, choix_coloc],
                        outputs=[caractere, conversation])
@@ -170,7 +177,7 @@ with gr.Blocks(title=TITRE) as demo:
     bouton_envoyer.click(envoyer, inputs=entrees_question, outputs=sorties_question)
     question.submit(envoyer, inputs=entrees_question, outputs=sorties_question)
 
-    bouton_accuser.click(accuser, inputs=[partie, choix_accuse, preuve], outputs=verdict)
+    bouton_accuser.click(accuser, inputs=[partie, choix_accuse, preuve, image], outputs=verdict)
 
     onglet_classement.select(rafraichir_classement, outputs=[tableau_classement, tableau_stats])
 

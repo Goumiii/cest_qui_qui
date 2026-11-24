@@ -138,12 +138,18 @@ def calculer_score(bon_coupable, preuve_acceptee, questions_restantes):
     return score
 
 
-def accuser(partie, nom_accuse, description):
+def accuser(partie, nom_accuse, description=None, image=None):
     """Vérifie l'accusation, calcule le score et termine la partie. Renvoie le verdict."""
     if partie.terminee:
         raise ValueError("Lance une nouvelle partie.")
     if not nom_accuse:
         raise ValueError("Choisis d'abord qui tu accuses.")
+
+    # Étape 7 : si une image est présentée, le modèle la décrit, puis Python décide
+    vu_par_arbitre = None
+    if image:
+        vu_par_arbitre = ia.decrire_image(partie.modele, image)
+        description = vu_par_arbitre
 
     coupable = [s["nom"] for s in partie.suspects if s["coupable"]][0]
     bon_coupable = nom_accuse == coupable
@@ -172,4 +178,5 @@ def accuser(partie, nom_accuse, description):
         "solution": partie.affaire["solution"],
         "questions_utilisees": questions_utilisees,
         "score": score,
+        "vu_par_arbitre": vu_par_arbitre,
     }

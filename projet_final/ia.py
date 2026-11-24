@@ -15,3 +15,14 @@ def repondre(modele, prompt_systeme, historique, question):
     if texte == "":
         return REPLIQUE_DE_SECOURS
     return texte
+
+
+def decrire_image(modele, chemin_image):
+    """Renvoie une phrase, en français, qui décrit l'objet principal d'une image."""
+    message = {
+        "role": "user",
+        "content": "Décris en une seule phrase, en français, l'objet principal de cette image.",
+        "images": [chemin_image],
+    }
+    reponse = ollama.chat(model=modele, messages=[message])
+    return reponse.message.content.strip()
