@@ -107,6 +107,8 @@ def poser_question(partie, nom, question):
     historique.append({"role": "user", "content": question})
     historique.append({"role": "assistant", "content": replique})
     partie.questions_restantes -= 1
+
+    donnees.enregistrer_echange(partie.pseudo, partie.affaire["affaire_id"], nom, question, replique)
     return replique
 
 
@@ -147,7 +149,20 @@ def accuser(partie, nom_accuse, description):
     bon_coupable = nom_accuse == coupable
     preuve_acceptee = preuve_valable(partie.affaire, description or "")
     score = calculer_score(bon_coupable, preuve_acceptee, partie.questions_restantes)
+    questions_utilisees = QUESTIONS_PAR_PARTIE - partie.questions_restantes
     partie.terminee = True
+
+    donnees.enregistrer_partie(
+        pseudo=partie.pseudo,
+        affaire_id=partie.affaire["affaire_id"],
+        affaire=partie.affaire["titre"],
+        accuse=nom_accuse,
+        bon_coupable=bon_coupable,
+        preuve_acceptee=preuve_acceptee,
+        questions_utilisees=questions_utilisees,
+        score=score,
+        profil=partie.profil,
+    )
 
     return {
         "bon_coupable": bon_coupable,
@@ -155,6 +170,6 @@ def accuser(partie, nom_accuse, description):
         "coupable": coupable,
         "preuve_attendue": partie.affaire["preuve_attendue"],
         "solution": partie.affaire["solution"],
-        "questions_utilisees": QUESTIONS_PAR_PARTIE - partie.questions_restantes,
+        "questions_utilisees": questions_utilisees,
         "score": score,
     }
