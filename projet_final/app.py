@@ -6,6 +6,7 @@ import gradio as gr
 import config
 import donnees
 import habillage
+import ia
 import jeu
 
 # ===== Le profil de la machine (étape 9) =====
@@ -28,6 +29,10 @@ REGLES = (
 
 AFFAIRES = donnees.lire_affaires()
 TITRES = AFFAIRES["titre"].tolist()
+
+# Étape 8 : les deux modes de jeu, et la voix de celui qui lit l'affaire et le verdict
+MODES = ["Écrit", "Voix"]
+VOIX_NARRATEUR = "male-french"
 
 
 # ===== Petites fonctions d'affichage =====
@@ -63,8 +68,34 @@ def texte_verdict(verdict):
     return "\n\n".join(lignes)
 
 
+def texte_verdict_oral(verdict):
+    """Renvoie le verdict en phrases simples, pour être lu à voix haute."""
+    if verdict["bon_coupable"]:
+        phrases = [f"Bravo, c'était bien {verdict['coupable']} !"]
+    else:
+        phrases = [f"Raté, c'était {verdict['coupable']}."]
+    if verdict["preuve_acceptee"]:
+        phrases.append("Ta preuve est acceptée.")
+    else:
+        phrases.append(f"Ta preuve est refusée. Il fallait {verdict['preuve_attendue']}.")
+    phrases.append(verdict["solution"])
+    phrases.append(f"Ton score est de {verdict['score']} sur 100.")
+    return " ".join(phrases)
+
+
+def dire(texte, voix, mode):
+    """En mode Voix, renvoie le fichier son du texte lu à voix haute. Sinon, rien."""
+    if mode != "Voix" or not PROFIL["voix"]:
+        return None
+    try:
+        return ia.parler(PROFIL["modele"], texte, voix)
+    except Exception:
+        gr.Warning("La voix n'a pas pu être générée. Le texte reste affiché.")
+        return None
+
+
 # ===== Les fonctions reliées aux événements =====
-def demarrer(pseudo, titre):
+def demarrer(pseudo, titre, mode):
     """Bouton « Nouvelle partie » : crée la partie et remet tout l'écran à zéro."""
     if titre is None:
         raise gr.Error("Choisis d'abord une affaire.")
@@ -73,6 +104,7 @@ def demarrer(pseudo, titre):
 
     noms = [s["nom"] for s in partie.suspects]
     description = f"## {partie.affaire['titre']}\n{partie.affaire['description']}"
+    lecture = f"{partie.affaire['titre']} {partie.affaire['description']}"
     return (
         partie,                                       # l'état de la partie
         description,                                  # description de l'affaire
@@ -85,7 +117,26 @@ def demarrer(pseudo, titre):
         "",                                           # pièce à conviction vide
         None,                                         # image vide
         "",                                           # verdict vide
+        None,                                         # micro vide
+        dire(lecture, VOIX_NARRATEUR, mode),          # l'affaire lue à voix haute
     )
+
+
+def changer_mode(mode):
+    """Choix Écrit / Voix : affiche ou masque le micro et le haut-parleur."""
+    voix = mode == "Voix"
+    return gr.update(visible=voix), gr.update(visible=voix)
+
+
+def dicter(enregistrement):
+    """Fin d'un enregistrement au micro : écrit la question dans la zone de texte."""
+    if enregistrement is None:
+        return gr.update(), None
+    try:
+        texte = ia.transcrire(PROFIL["modele"], enregistrement)
+    except Exception:
+        raise gr.Error("Je n'ai pas réussi à comprendre l'enregistrement. Réessaie ou tape ta question.")
+    return texte, None
 
 
 def changer_suspect(partie, nom):
@@ -95,7 +146,7 @@ def changer_suspect(partie, nom):
     return texte_caractere(partie, nom), list(partie.historiques[nom])
 
 
-def envoyer(partie, nom, question):
+def envoyer(partie, nom, question, mode):
     """Bouton « Envoyer » ou touche Entrée : pose la question au coloc choisi."""
     if partie is None:
         raise gr.Error("Lance d'abord une nouvelle partie.")
@@ -107,11 +158,14 @@ def envoyer(partie, nom, question):
         raise gr.Error(str(erreur))
 
     if replique is None:  # question vide : rien ne change
-        return list(partie.historiques[nom]), question, texte_compteur(partie)
-    return list(partie.historiques[nom]), "", texte_compteur(partie)
+        return list(partie.historiques[nom]), question, texte_compteur(partie), None
+
+    voix = jeu.trouver_suspect(partie, nom)["voix"]
+    son = dire(replique, voix, mode)
+    return list(partie.historiques[nom]), "", texte_compteur(partie), son
 
 
-def accuser(partie, nom_accuse, preuve, image):
+def accuser(partie, nom_accuse, preuve, image, mode):
     """Bouton « C'est lui ! C'est elle ! » : affiche le verdict."""
     if partie is None:
         raise gr.Error("Lance d'abord une nouvelle partie.")
@@ -121,7 +175,7 @@ def accuser(partie, nom_accuse, preuve, image):
         verdict = jeu.accuser(partie, nom_accuse, description=preuve, image=image)
     except ValueError as erreur:
         raise gr.Error(str(erreur))
-    return texte_verdict(verdict)
+    return texte_verdict(verdict), dire(texte_verdict_oral(verdict), VOIX_NARRATEUR, mode)
 
 
 def rafraichir_classement():
@@ -150,6 +204,8 @@ with gr.Blocks(title=TITRE) as demo:
                 with gr.Row():
                     pseudo = gr.Textbox(label="Ton pseudo", placeholder="Anonyme", scale=2)
                     choix_affaire = gr.Dropdown(TITRES, value=TITRES[0], label="L'affaire", scale=3)
+                    choix_mode = gr.Radio(MODES, value="Écrit", label="Mode de jeu", scale=1,
+                                          visible=PROFIL["voix"])
                     bouton_demarrer = gr.Button("Nouvelle partie", scale=1,
                                                 elem_classes=["bouton-retro"])
 
@@ -163,11 +219,15 @@ with gr.Blocks(title=TITRE) as demo:
                         with gr.Group():
                             question = gr.Textbox(label="Ta question",
                                                   placeholder="Tu faisais quoi hier soir ?")
+                            micro = gr.Audio(sources=["microphone"], type="filepath",
+                                             label="🎤 Dicte ta question", visible=False)
                             bouton_envoyer = gr.Button("Envoyer", elem_classes=["bouton-retro"])
                         compteur = gr.Markdown(texte_compteur(None))
                     # Colonne de droite : la conversation
                     with gr.Column(scale=2):
                         conversation = gr.Chatbot(label="La conversation", height=400)
+                        haut_parleur = gr.Audio(label="🔊 Haut-parleur", autoplay=True,
+                                                interactive=False, visible=False)
 
                 # Zone d'accusation
                 gr.Markdown("## L'accusation")
@@ -198,19 +258,23 @@ with gr.Blocks(title=TITRE) as demo:
     # ===== Les événements =====
     bouton_demarrer.click(
         demarrer,
-        inputs=[pseudo, choix_affaire],
+        inputs=[pseudo, choix_affaire, choix_mode],
         outputs=[partie, description, choix_coloc, caractere, conversation,
-                 question, compteur, choix_accuse, preuve, image, verdict],
+                 question, compteur, choix_accuse, preuve, image, verdict,
+                 micro, haut_parleur],
     )
+    choix_mode.change(changer_mode, inputs=choix_mode, outputs=[micro, haut_parleur])
+    micro.stop_recording(dicter, inputs=micro, outputs=[question, micro])
     choix_coloc.change(changer_suspect, inputs=[partie, choix_coloc],
                        outputs=[caractere, conversation])
 
-    entrees_question = [partie, choix_coloc, question]
-    sorties_question = [conversation, question, compteur]
+    entrees_question = [partie, choix_coloc, question, choix_mode]
+    sorties_question = [conversation, question, compteur, haut_parleur]
     bouton_envoyer.click(envoyer, inputs=entrees_question, outputs=sorties_question)
     question.submit(envoyer, inputs=entrees_question, outputs=sorties_question)
 
-    bouton_accuser.click(accuser, inputs=[partie, choix_accuse, preuve, image], outputs=verdict)
+    bouton_accuser.click(accuser, inputs=[partie, choix_accuse, preuve, image, choix_mode],
+                         outputs=[verdict, haut_parleur])
 
     onglet_classement.select(rafraichir_classement, outputs=[tableau_classement, tableau_stats])
 
