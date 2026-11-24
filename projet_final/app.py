@@ -5,6 +5,7 @@ import gradio as gr
 
 import config
 import donnees
+import habillage
 import jeu
 
 # ===== Le profil de la machine (étape 9) =====
@@ -132,51 +133,67 @@ def rafraichir_classement():
 with gr.Blocks(title=TITRE) as demo:
     partie = gr.State(None)
 
-    gr.Markdown(f"# 🕵️ {TITRE}")
-    gr.Markdown(REGLES)
-    gr.Markdown(f"*Profil : {PROFIL_NOM} — modèle {PROFIL['modele']}*")
+    gr.HTML(habillage.entete(1337 + len(donnees.lire_parties())))
 
-    with gr.Tab("Jouer"):
-        # Ligne de lancement
-        with gr.Row():
-            pseudo = gr.Textbox(label="Ton pseudo", placeholder="Anonyme", scale=2)
-            choix_affaire = gr.Dropdown(TITRES, value=TITRES[0], label="L'affaire", scale=3)
-            bouton_demarrer = gr.Button("Nouvelle partie", variant="primary", scale=1)
+    with gr.Row():
+        # Les publicités de gauche
+        with gr.Column(scale=1, min_width=170, elem_classes=["colonne-pub"]):
+            gr.HTML(habillage.PUBS_GAUCHE)
 
-        description = gr.Markdown("*Choisis une affaire et lance une nouvelle partie.*")
+        # Le jeu, au centre
+        with gr.Column(scale=5, elem_id="page-centrale"):
+            gr.Markdown(REGLES)
+            gr.Markdown(f"*Profil : {PROFIL_NOM} — modèle {PROFIL['modele']}*")
 
-        with gr.Row():
-            # Colonne de gauche : le coloc et la question
-            with gr.Column(scale=1):
-                choix_coloc = gr.Radio([], label="À qui parles-tu ?")
-                caractere = gr.Markdown()
-                with gr.Group():
-                    question = gr.Textbox(label="Ta question", placeholder="Tu faisais quoi hier soir ?")
-                    bouton_envoyer = gr.Button("Envoyer")
-                compteur = gr.Markdown(texte_compteur(None))
-            # Colonne de droite : la conversation
-            with gr.Column(scale=2):
-                conversation = gr.Chatbot(label="La conversation", height=400)
+            with gr.Tab("🔍 Jouer"):
+                # Ligne de lancement
+                with gr.Row():
+                    pseudo = gr.Textbox(label="Ton pseudo", placeholder="Anonyme", scale=2)
+                    choix_affaire = gr.Dropdown(TITRES, value=TITRES[0], label="L'affaire", scale=3)
+                    bouton_demarrer = gr.Button("Nouvelle partie", scale=1,
+                                                elem_classes=["bouton-retro"])
 
-        # Zone d'accusation
-        gr.Markdown("## L'accusation")
-        with gr.Row():
-            choix_accuse = gr.Radio([], label="Qui est coupable ?", scale=1)
-            with gr.Column(scale=2):
-                image = gr.Image(type="filepath", label="La pièce à conviction en image",
-                                 height=200, visible=PROFIL["image"])
-                preuve = gr.Textbox(label="… ou décris-la par écrit" if PROFIL["image"]
-                                    else "La pièce à conviction, décrite par écrit",
-                                    placeholder="Décris l'objet qui trahit le coupable")
-        bouton_accuser = gr.Button("C'est lui ! C'est elle !", variant="stop")
+                description = gr.Markdown("*Choisis une affaire et lance une nouvelle partie.*")
 
-        verdict = gr.Markdown()
+                with gr.Row():
+                    # Colonne de gauche : le coloc et la question
+                    with gr.Column(scale=1):
+                        choix_coloc = gr.Radio([], label="À qui parles-tu ?")
+                        caractere = gr.Markdown()
+                        with gr.Group():
+                            question = gr.Textbox(label="Ta question",
+                                                  placeholder="Tu faisais quoi hier soir ?")
+                            bouton_envoyer = gr.Button("Envoyer", elem_classes=["bouton-retro"])
+                        compteur = gr.Markdown(texte_compteur(None))
+                    # Colonne de droite : la conversation
+                    with gr.Column(scale=2):
+                        conversation = gr.Chatbot(label="La conversation", height=400)
 
-    with gr.Tab("Classement") as onglet_classement:
-        gr.Markdown("### Classement des joueurs")
-        tableau_classement = gr.Dataframe(interactive=False)
-        gr.Markdown("### Statistiques par affaire")
-        tableau_stats = gr.Dataframe(interactive=False)
+                # Zone d'accusation
+                gr.Markdown("## L'accusation")
+                with gr.Row():
+                    choix_accuse = gr.Radio([], label="Qui est coupable ?", scale=1)
+                    with gr.Column(scale=2):
+                        image = gr.Image(type="filepath", label="La pièce à conviction en image",
+                                         height=200, visible=PROFIL["image"])
+                        preuve = gr.Textbox(label="… ou décris-la par écrit" if PROFIL["image"]
+                                            else "La pièce à conviction, décrite par écrit",
+                                            placeholder="Décris l'objet qui trahit le coupable")
+                bouton_accuser = gr.Button("C'est lui ! C'est elle !", elem_classes=["bouton-rouge"])
+
+                verdict = gr.Markdown()
+
+            with gr.Tab("🏆 Classement") as onglet_classement:
+                gr.Markdown("### Classement des joueurs")
+                tableau_classement = gr.Dataframe(interactive=False)
+                gr.Markdown("### Statistiques par affaire")
+                tableau_stats = gr.Dataframe(interactive=False)
+
+        # Les publicités de droite
+        with gr.Column(scale=1, min_width=170, elem_classes=["colonne-pub"]):
+            gr.HTML(habillage.PUBS_DROITE)
+
+    gr.HTML(habillage.PIED)
 
     # ===== Les événements =====
     bouton_demarrer.click(
@@ -199,4 +216,4 @@ with gr.Blocks(title=TITRE) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(css=habillage.CSS)
