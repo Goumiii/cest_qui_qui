@@ -17,4 +17,5 @@ while True:
         ],
     )
     print("Bastien :", reponse.message.content)
+
     
