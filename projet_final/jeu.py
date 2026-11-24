@@ -2,6 +2,7 @@
 import unicodedata
 from dataclasses import dataclass, field
 
+import config
 import donnees
 import ia
 

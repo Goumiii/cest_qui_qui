@@ -1,8 +1,21 @@
 """L'interface du jeu dans le navigateur, avec Gradio. Ce fichier ne contient aucune règle."""
+import sys
+
 import gradio as gr
 
+import config
 import donnees
 import jeu
+
+# ===== Le profil de la machine (étape 9) =====
+# python app.py          -> choix automatique
+# python app.py leger    -> profil imposé
+try:
+    PROFIL_NOM, PROFIL = config.choisir_profil(sys.argv[1] if len(sys.argv) > 1 else None)
+except ValueError as erreur:
+    print(erreur)
+    sys.exit(1)
+print(f"Profil : {PROFIL_NOM} (modèle {PROFIL['modele']})")
 
 TITRE = "C'est Qui Qui ?"
 REGLES = (
@@ -46,7 +59,7 @@ def texte_verdict(verdict):
     lignes.append(f"\n**Ce qui s'est passé :** {verdict['solution']}")
     lignes.append(f"\nQuestions utilisées : {verdict['questions_utilisees']}")
     lignes.append(f"\n# Score : {verdict['score']} / 100")
-    return "\n".join(lignes)
+    return "\n\n".join(lignes)
 
 
 # ===== Les fonctions reliées aux événements =====
@@ -55,7 +68,7 @@ def demarrer(pseudo, titre):
     if titre is None:
         raise gr.Error("Choisis d'abord une affaire.")
     affaire_id = int(AFFAIRES[AFFAIRES["titre"] == titre]["affaire_id"].iloc[0])
-    partie = jeu.nouvelle_partie(pseudo, affaire_id)
+    partie = jeu.nouvelle_partie(pseudo, affaire_id, modele=PROFIL["modele"], profil=PROFIL_NOM)
 
     noms = [s["nom"] for s in partie.suspects]
     description = f"## {partie.affaire['titre']}\n{partie.affaire['description']}"
@@ -121,6 +134,7 @@ with gr.Blocks(title=TITRE) as demo:
 
     gr.Markdown(f"# 🕵️ {TITRE}")
     gr.Markdown(REGLES)
+    gr.Markdown(f"*Profil : {PROFIL_NOM} — modèle {PROFIL['modele']}*")
 
     with gr.Tab("Jouer"):
         # Ligne de lancement
@@ -149,8 +163,10 @@ with gr.Blocks(title=TITRE) as demo:
         with gr.Row():
             choix_accuse = gr.Radio([], label="Qui est coupable ?", scale=1)
             with gr.Column(scale=2):
-                image = gr.Image(type="filepath", label="La pièce à conviction en image", height=200)
-                preuve = gr.Textbox(label="… ou décris-la par écrit",
+                image = gr.Image(type="filepath", label="La pièce à conviction en image",
+                                 height=200, visible=PROFIL["image"])
+                preuve = gr.Textbox(label="… ou décris-la par écrit" if PROFIL["image"]
+                                    else "La pièce à conviction, décrite par écrit",
                                     placeholder="Décris l'objet qui trahit le coupable")
         bouton_accuser = gr.Button("C'est lui ! C'est elle !", variant="stop")
 
